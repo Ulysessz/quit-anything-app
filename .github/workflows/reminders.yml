@@ -2,7 +2,7 @@ name: Wake reminder delivery
 
 on:
   schedule:
-    - cron: "2-57/5 * * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -12,19 +12,29 @@ permissions:
 jobs:
   wake-reminders:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 65
     steps:
-      - name: Wake the private reminder checker
+      - name: Keep the private reminder checker awake
         shell: bash
         env:
           REMINDER_ENDPOINT: https://quit-anything-app.ulysesnunez446.chatgpt.site/api/reminders/run
+          LOOP_SECONDS: 3300
         run: |
-          token_response="$(curl --fail --silent --show-error \
-            --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=quit-anything-app-reminders")"
-          oidc_token="$(jq -r '.value' <<< "${token_response}")"
-          test -n "${oidc_token}"
-          curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer ${oidc_token}" \
-            "${REMINDER_ENDPOINT}"
+          end_at=$((SECONDS + LOOP_SECONDS))
+          while true; do
+            token_response="$(curl --fail --silent --show-error \
+              --header "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=quit-anything-app-reminders")"
+            oidc_token="$(jq -r '.value' <<< "${token_response}")"
+            test -n "${oidc_token}"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${oidc_token}" \
+              "${REMINDER_ENDPOINT}"
+            echo
+
+            if [[ "${GITHUB_EVENT_NAME}" != "schedule" ]] || (( SECONDS + 300 > end_at )); then
+              break
+            fi
+            sleep 300
+          done
